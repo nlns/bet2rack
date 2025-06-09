@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet2rack - Gelişmiş Maç Takibi</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js -->
+    <script src="https://unpkg.com/vue@3"></script>
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f9fafb; }
+        .match-card, .bet-option { transition: all 0.2s ease-in-out; }
+        .match-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); cursor: pointer; }
+        [v-cloak] { display: none; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(50%) sepia(10%) saturate(1000%) hue-rotate(180deg); cursor: pointer; }
+        .tab-content-enter-active { transition: opacity 0.4s ease-out, transform 0.4s ease-out; }
+        .tab-content-enter-from { opacity: 0; transform: translateY(10px); }
+        .tab-content-leave-to { display: none; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="app" v-cloak>
+        <header class="bg-white shadow-sm sticky top-0 z-10">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center relative">
+                <div class="w-10">
+                     <button v-if="currentView === 'detail'" @click="showListView" class="text-gray-500 hover:text-blue-600 z-20">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                </div>
+               
+                <h1 class="text-2xl font-bold text-gray-900 absolute left-1/2 -translate-x-1/2">
+                    Be<span class="text-blue-600">t<sup>2</sup></span>rack
+                </h1>
+
+                <div class="w-auto z-20">
+                    <input type="date" v-model="selectedDate" class="bg-gray-100 border-gray-200 border-2 rounded-md p-1.5 text-sm font-semibold text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+        </header>
+
+        <main class="container mx-auto p-4">
+            <div v-if="loading" class="text-center py-16">
+                <p class="text-gray-500 font-semibold">Maçlar yükleniyor...</p>
+            </div>
+            <div v-if="!loading && error" class="text-center py-16 px-4">
+                <p class="text-red-500 font-semibold">{{ error }}</p>
+            </div>
+
+            <transition name="fade" mode="out-in">
+                <!-- Maç Listesi Görünümü -->
+                <div v-if="currentView === 'list' && !loading && !error" key="list-view">
+                    <league-group 
+                        v-for="league in leagues" 
+                        :key="league.name" 
+                        :league-name="league.name" 
+                        :matches="league.matches"
+                        @match-selected="showDetailView">
+                    </league-group>
+                     <p v-if="!leagues.length" class="text-center text-gray-500 py-16">Seçilen tarih için gösterilecek maç bulunamadı.</p>
+                </div>
+                <!-- Maç Detay Görünümü -->
+                <match-detail 
+                    v-else-if="currentView === 'detail'" 
+                    key="detail-view"
+                    :match="selectedMatch"
+                    @track-bet="trackBet"
+                    >
+                </match-detail>
+            </transition>
+        </main>
+    </div>
+
+    <!-- VUE.JS ŞABLONLARI -->
+    <script type="text/x-template" id="match-card-template">
+        <div class="match-card rounded-lg shadow p-4 mb-3 flex items-center" :class="cardClasses" @click="$emit('match-selected', match)">
+            <div class="w-16 text-center text-sm font-semibold" :class="timeClasses">{{ match.time }}</div>
+            <div class="flex-grow mx-2">
+                <div class="flex items-center mb-1"><img :src="match.homeLogo" class="w-4 h-4 mr-2" alt="home logo" @error.once="$event.target.style.display='none'"> <span class="font-semibold" :class="textClasses">{{ match.homeTeam }}</span></div>
+                <div class="flex items-center"><img :src="match.awayLogo" class="w-4 h-4 mr-2" alt="away logo" @error.once="$event.target.style.display='none'"> <span class="font-semibold" :class="textClasses">{{ match.awayTeam }}</span></div>
+            </div>
+            <div class="flex items-center justify-end">
+                <div class="text-3xl mr-2" :class="textClasses">{{ catEmoji }}</div>
+                <div class="w-16 text-center text-2xl font-bold" :class="textClasses">
+                    <div>{{ match.homeScore }}</div>
+                    <div>{{ match.awayScore }}</div>
+                </div>
+            </div>
+        </div>
+    </script>
+    
+    <script type="text/x-template" id="league-group-template">
+        <div class="mb-6">
+            <h2 class="text-sm font-bold uppercase text-gray-500 mb-3 ml-1">{{ leagueName }}</h2>
+            <match-card 
+                v-for="match in matches" 
+                :key="match.id" 
+                :match="match"
+                @match-selected="(selectedMatch) => $emit('match-selected', selectedMatch)">
+            </match-card>
+        </div>
+    </script>
+    
+    <script type="text/x-template" id="match-detail-template">
+        <div class="flex flex-col h-full">
+            <div class="text-center py-4 bg-white rounded-lg shadow-md mb-4">
+                <div class="text-sm text-gray-500 mb-2">{{ match.leagueName }}</div>
+                <div class="flex justify-around items-center mb-2 px-2">
+                    <div class="flex flex-col items-center w-1/3 text-center">
+                        <img :src="match.homeLogo" class="w-12 h-12 mb-1" alt="home logo" @error.once="$event.target.style.display='none'"/>
+                        <span class="font-bold text-lg">{{ match.homeTeam }}</span>
+                    </div>
+                    <span class="font-bold text-4xl mx-4">{{ match.homeScore }} - {{ match.awayScore }}</span>
+                    <div class="flex flex-col items-center w-1/3 text-center">
+                        <img :src="match.awayLogo" class="w-12 h-12 mb-1" alt="away logo" @error.once="$event.target.style.display='none'"/>
+                        <span class="font-bold text-lg">{{ match.awayTeam }}</span>
+                    </div>
+                </div>
+                <div class="text-lg font-bold text-red-600">{{ match.time }}</div>
+            </div>
+
+            <div class="flex-grow bg-white rounded-lg shadow-md">
+                <div class="flex border-b border-gray-200 overflow-x-auto">
+                    <button v-for="tab in tabs" :key="tab.key"
+                            @click="activeTab = tab.key" 
+                            :class="activeTab === tab.key ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                            class="flex-shrink-0 px-4 py-3 font-semibold border-b-2 transition-colors duration-200 text-sm">
+                        {{ tab.label }}
+                    </button>
+                </div>
+                
+                <div class="p-4">
+                    <div v-if="isLoadingDetails && activeTab !== 'bet2rack'" class="text-center py-8 text-gray-500">Detaylar yükleniyor...</div>
+                    <div v-if="!isLoadingDetails && detailError" class="text-center py-8 text-red-500">{{ detailError }}</div>
+                    
+                    <transition name="tab-content" mode="out-in">
+                        <div :key="activeTab">
+                            <div v-if="activeTab === 'bet2rack'">
+                                <div v-if="match.betStatus !== 'default' && match.betStatus !== 'tracking'" class="text-center p-4 mb-4 rounded-lg" :class="{'bg-green-50 text-green-800': match.betStatus === 'won', 'bg-gray-100 text-gray-800': match.betStatus === 'lost'}">
+                                    <p>Bu maça oynadığınız <strong class="font-bold">{{ formattedTrackedBet }}</strong> bahsi <strong class="font-bold">{{ match.betStatus === 'won' ? 'KAZANDI' : 'KAYBETTİ' }}</strong>.</p>
+                                </div>
+                                <div v-else-if="match.betStatus === 'tracking'" class="text-center p-4 mb-4 rounded-lg bg-blue-50 text-blue-800">
+                                    <p>Bu maçı <strong class="font-bold">{{ formattedTrackedBet }}</strong> bahsiyle takip ediyorsunuz.</p>
+                                </div>
+                                <div class="space-y-3">
+                                    <template v-for="category in availableBets" :key="category.name">
+                                         <div v-if="category.options.length > 0">
+                                            <h3 class="font-semibold text-gray-500 uppercase mb-2 text-sm">{{ category.name }}</h3>
+                                            <button v-for="bet in category.options" :key="bet.type" @click="selectedBet = bet.type" 
+                                                    class="bet-option w-full text-left p-4 rounded-lg border-2"
+                                                    :class="selectedBet === bet.type ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'">
+                                                <span class="font-semibold">{{ bet.label }}</span>
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="mt-6">
+                                     <button @click="$emit('track-bet', selectedBet)" :disabled="!selectedBet"
+                                             class="w-full bg-blue-600 text-white font-bold py-4 rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                                         {{ match.betStatus !== 'default' ? 'BAHSİ GÜNCELLE' : 'BU BAHSİ TAKİP ET' }}
+                                     </button>
+                                </div>
+                            </div>
+                            
+                            <div v-if="activeTab === 'summary'" class="space-y-4">
+                                <div v-for="event in details.events" class="flex items-center text-sm">
+                                    <span class="w-12 text-center font-bold">{{ event.time.elapsed }}'</span>
+                                    <div class="flex items-center">
+                                        <img v-if="event.type === 'Goal' || event.type === 'Card'" :src="event.team.logo" class="w-4 h-4 mr-2" @error.once="$event.target.style.display='none'"/>
+                                        <span v-if="event.type === 'Goal'" class="text-2xl mr-2">⚽</span>
+                                        <span v-if="event.type === 'Card' && event.detail === 'Yellow Card'" class="w-3 h-4 bg-yellow-400 rounded-sm mr-2"></span>
+                                        <span v-if="event.type === 'Card' && event.detail === 'Red Card'" class="w-3 h-4 bg-red-500 rounded-sm mr-2"></span>
+                                        <div>
+                                            <p class="font-semibold">{{ event.player.name }}</p>
+                                            <p class="text-xs text-gray-500">{{ event.detail }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p v-if="!details.events || details.events.length === 0" class="text-center text-gray-400 py-4">Maçta önemli bir olay kaydedilmedi.</p>
+                            </div>
+                            
+                            <div v-if="activeTab === 'stats'" class="space-y-3">
+                                <div v-for="stat in details.stats" class="text-sm">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-semibold">{{ stat.home }}</span>
+                                        <span class="text-gray-500 font-bold">{{ stat.type }}</span>
+                                        <span class="font-semibold">{{ stat.away }}</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="bg-gray-200 h-2 w-full rounded-full" :class="{'bg-blue-200': stat.home > stat.away}">
+                                            <div class="bg-blue-500 h-2 rounded-full" :style="{ width: stat.homePercentage + '%' }"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                 <p v-if="!details.stats || details.stats.length === 0" class="text-center text-gray-400 py-4">İstatistik verisi bulunamadı.</p>
+                            </div>
+
+                            <div v-if="activeTab === 'lineups'" class="grid grid-cols-2 gap-4 text-sm">
+                                <div v-for="team in details.lineups" :key="team.team.id">
+                                    <h4 class="font-bold mb-2">{{ team.team.name }} <span class="text-xs text-gray-500">({{team.formation}})</span></h4>
+                                    <p class="font-semibold text-xs mb-1">İlk 11</p>
+                                    <ul><li v-for="player in team.startXI">{{ player.player.name }}</li></ul>
+                                    <p class="font-semibold text-xs mt-3 mb-1">Yedekler</p>
+                                    <ul><li v-for="player in team.substitutes">{{ player.player.name }}</li></ul>
+                                </div>
+                                <p v-if="!details.lineups || details.lineups.length === 0" class="col-span-2 text-center text-gray-400 py-4">Kadro verisi bulunamadı.</p>
+                            </div>
+
+                            <div v-if="activeTab === 'standings'" class="overflow-x-auto">
+                               <table class="w-full text-left text-xs">
+                                    <thead><tr class="text-gray-500"><th class="p-2">#</th><th class="p-2">Takım</th><th class="p-2">O</th><th class="p-2">G</th><th class="p-2">B</th><th class="p-2">M</th><th class="p-2">P</th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="t in details.standings" :class="{'bg-blue-50 font-bold': t.team.id === match.homeId || t.team.id === match.awayId}">
+                                            <td class="p-2">{{ t.rank }}</td>
+                                            <td class="p-2">{{ t.team.name }}</td>
+                                            <td class="p-2">{{ t.all.played }}</td>
+                                            <td class="p-2">{{ t.all.win }}</td>
+                                            <td class="p-2">{{ t.all.draw }}</td>
+                                            <td class="p-2">{{ t.all.lose }}</td>
+                                            <td class="p-2">{{ t.points }}</td>
+                                        </tr>
+                                    </tbody>
+                               </table>
+                               <p v-if="!details.standings || details.standings.length === 0" class="text-center text-gray-400 py-4">Puan durumu verisi bulunamadı.</p>
+                            </div>
+                        </div>
+                    </transition>
+                </div>
+            </div>
+        </div>
+    </script>
+
+
+    <!-- VUE.JS KODU -->
+    <script>
+        const app = Vue.createApp({
+            data() {
+                return {
+                    loading: true, error: null, currentView: 'list', 
+                    selectedMatch: null, leagues: [],
+                    selectedDate: '2023-05-28', trackedBets: {}, 
+                }
+            },
+            methods: {
+                async fetchMatches() {
+                    this.loading = true; this.error = null;
+                    try {
+                        // GÜVENLİ API ÇAĞRISI: Kendi Netlify fonksiyonumuzu çağırıyoruz
+                        const response = await fetch(`/.netlify/functions/fetch-matches?date=${this.selectedDate}`);
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || `Sunucu Hatası: ${response.status}`);
+                        }
+                        const data = await response.json();
+                        
+                        const formattedMatches = data.map(item => {
+                            let trackedInfo = this.trackedBets[item.id];
+                            if (item.time === 'BİTTİ' && trackedInfo && trackedInfo.betStatus === 'tracking') {
+                                trackedInfo.betStatus = Math.random() < 0.5 ? 'won' : 'lost';
+                            }
+                            return { ...item, betStatus: trackedInfo ? trackedInfo.betStatus : 'default', trackedBet: trackedInfo ? trackedInfo.trackedBet : null, };
+                        });
+                        
+                        // Liglere göre gruplama
+                        const grouped = formattedMatches.reduce((acc, match) => {
+                            (acc[match.leagueName] = acc[match.leagueName] || []).push(match);
+                            return acc;
+                        }, {});
+
+                        this.leagues = Object.entries(grouped).map(([name, matches]) => ({name, matches}));
+                        
+                        this.saveTrackedBets();
+                    } catch (e) {
+                        console.error("Hata: ", e);
+                        this.error = e.message;
+                    } finally { this.loading = false; }
+                },
+                showDetailView(match) { this.selectedMatch = match; this.currentView = 'detail'; },
+                showListView() { this.selectedMatch = null; this.currentView = 'list'; },
+                trackBet(betType) {
+                    if (this.selectedMatch) {
+                        const allMatches = this.leagues.flatMap(l => l.matches);
+                        const matchToUpdate = allMatches.find(m => m.id === this.selectedMatch.id);
+                        if (matchToUpdate) {
+                            matchToUpdate.betStatus = 'tracking';
+                            matchToUpdate.trackedBet = betType;
+                            this.trackedBets[matchToUpdate.id] = { betStatus: 'tracking', trackedBet: betType };
+                            this.saveTrackedBets();
+                        }
+                        this.showListView();
+                    }
+                },
+                saveTrackedBets() { localStorage.setItem('bet2rack_tracked_bets', JSON.stringify(this.trackedBets)); },
+                loadTrackedBets() {
+                    const savedBets = localStorage.getItem('bet2rack_tracked_bets');
+                    if (savedBets) { this.trackedBets = JSON.parse(savedBets); }
+                },
+            },
+            watch: { selectedDate() { this.fetchMatches(); } },
+            mounted() { this.loadTrackedBets(); this.fetchMatches(); },
+        });
+
+        const MatchCardComponent = { template: '#match-card-template', props: ['match'], emits: ['match-selected'], computed: { cardClasses() { switch (this.match.betStatus) { case 'tracking': return 'bg-red-50 border border-red-200'; case 'won': return 'bg-green-50 border border-green-200'; case 'lost': return 'bg-gray-200 border border-gray-300'; default: return 'bg-white'; } }, textClasses() { switch (this.match.betStatus) { case 'tracking': return 'text-red-900'; case 'won': return 'text-green-900'; case 'lost': return 'text-gray-600'; default: return 'text-gray-800'; } }, timeClasses() { switch (this.match.betStatus) { case 'tracking': return 'text-red-600 font-bold'; case 'won': return 'text-green-600'; case 'lost': return 'text-gray-500'; default: return 'text-gray-500'; } }, catEmoji() { switch (this.match.betStatus) { case 'tracking': return '🙀'; case 'won': return '😸'; case 'lost': return '😿'; default: return '🐱'; } } } };
+        const LeagueGroupComponent = { template: '#league-group-template', props: ['leagueName', 'matches'], emits: ['match-selected'], components: { 'match-card': MatchCardComponent } };
+        const MatchDetailComponent = {
+            template: '#match-detail-template',
+            props: ['match'],
+            emits: ['track-bet'],
+            data() {
+                return {
+                    isLoadingDetails: true, detailError: null,
+                    activeTab: 'bet2rack',
+                    selectedBet: this.match.trackedBet,
+                    details: { events: [], stats: [], lineups: [], standings: [] },
+                    tabs: [
+                        { key: 'bet2rack', label: 'BET2RACK' }, { key: 'summary', label: 'ÖZET' },
+                        { key: 'stats', label: 'İSTATİSTİKLER' }, { key: 'lineups', label: 'KADROLAR' },
+                        { key: 'standings', label: 'PUAN DURUMU' }
+                    ]
+                }
+            },
+            methods: {
+                async fetchDetails() {
+                    this.isLoadingDetails = true; this.detailError = null;
+                    try {
+                        const response = await fetch(`/.netlify/functions/fetch-details?matchId=${this.match.id}&leagueId=${this.match.leagueId}`);
+                        if (!response.ok) throw new Error('Detay verileri çekilemedi.');
+                        const data = await response.json();
+                        this.details = data;
+                    } catch (e) {
+                        this.detailError = e.message;
+                    } finally { this.isLoadingDetails = false; }
+                }
+            },
+            computed: {
+                availableBets() { const homeScore = parseInt(this.match.homeScore); const awayScore = parseInt(this.match.awayScore); const allTotalBets = [ { value: 0.5, type: 'over_0.5', label: '0.5 Gol Üst' }, { value: 0.5, type: 'under_0.5', label: '0.5 Gol Alt' }, { value: 1.5, type: 'over_1.5', label: '1.5 Gol Üst' }, { value: 1.5, type: 'under_1.5', label: '1.5 Gol Alt' }, { value: 2.5, type: 'over_2.5', label: '2.5 Gol Üst' }, { value: 2.5, type: 'under_2.5', label: '2.5 Gol Alt' }, { value: 3.5, type: 'over_3.5', label: '3.5 Gol Üst' }, { value: 3.5, type: 'under_3.5', label: '3.5 Gol Alt' }, { value: 4.5, type: 'over_4.5', label: '4.5 Gol Üst' }, { value: 4.5, type: 'under_4.5', label: '4.5 Gol Alt' }, ]; let filteredTotalBets; if (!isNaN(homeScore) && !isNaN(awayScore)) { const totalGoals = homeScore + awayScore; filteredTotalBets = allTotalBets.filter(bet => bet.value > totalGoals); } else { filteredTotalBets = allTotalBets; } return [ { name: 'Taraf Bahsi', options: [{ type: 'home_win', label: '1 (Ev Sahibi Kazanır)' }, { type: 'draw', label: 'X (Beraberlik)' }, { type: 'away_win', label: '2 (Deplasman Kazanır)' }] }, { name: 'Toplam Gol', options: filteredTotalBets }, { name: 'Karşılıklı Gol', options: [{ type: 'btts_yes', label: 'VAR' }, { type: 'btts_no', label: 'YOK' }] }, { name: 'Toplam Korner', options: [{ type: 'corner_over_8.5', label: '8.5 Korner Üst' }, { type: 'corner_under_8.5', label: '8.5 Korner Alt' }] } ]; },
+                activeCategory() {  },
+                formattedTrackedBet() {
+                    const allBetOptions = this.availableBets.flatMap(c => c.options);
+                    const bet = allBetOptions.find(b => b.type === this.match.trackedBet);
+                    return bet ? bet.label : 'Bilinmeyen Bahis';
+                }
+            },
+            mounted() { this.fetchDetails(); }
+        };
+        
+        app.component('league-group', LeagueGroupComponent);
+        app.component('match-detail', MatchDetailComponent);
+        app.mount('#app');
+    </script>
+</body>
+</html>
+
+
+
