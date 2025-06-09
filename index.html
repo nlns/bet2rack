@@ -252,7 +252,6 @@
                 async fetchMatches() {
                     this.loading = true; this.error = null;
                     try {
-                        // GÜVENLİ API ÇAĞRISI: Kendi Netlify fonksiyonumuzu çağırıyoruz
                         const response = await fetch(`/.netlify/functions/fetch-matches?date=${this.selectedDate}`);
                         if (!response.ok) {
                             const errorData = await response.json();
@@ -268,7 +267,6 @@
                             return { ...item, betStatus: trackedInfo ? trackedInfo.betStatus : 'default', trackedBet: trackedInfo ? trackedInfo.trackedBet : null, };
                         });
                         
-                        // Liglere göre gruplama
                         const grouped = formattedMatches.reduce((acc, match) => {
                             (acc[match.leagueName] = acc[match.leagueName] || []).push(match);
                             return acc;
@@ -357,6 +355,4 @@
     </script>
 </body>
 </html>
-
-
 
