@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -262,7 +263,8 @@
                         const formattedMatches = data.map(item => {
                             let trackedInfo = this.trackedBets[item.id];
                             if (item.time === 'BİTTİ' && trackedInfo && trackedInfo.betStatus === 'tracking') {
-                                trackedInfo.betStatus = Math.random() < 0.5 ? 'won' : 'lost';
+                                // YENİ: Gerçek bahis sonucunu kontrol et
+                                trackedInfo.betStatus = this.checkBetResult(item, trackedInfo.trackedBet);
                             }
                             return { ...item, betStatus: trackedInfo ? trackedInfo.betStatus : 'default', trackedBet: trackedInfo ? trackedInfo.trackedBet : null, };
                         });
@@ -279,6 +281,34 @@
                         console.error("Hata: ", e);
                         this.error = e.message;
                     } finally { this.loading = false; }
+                },
+                // YENİ: Bahis Sonucunu Kontrol Eden Fonksiyon
+                checkBetResult(match, trackedBetType) {
+                    const hs = parseInt(match.homeScore);
+                    const as = parseInt(match.awayScore);
+
+                    if(isNaN(hs) || isNaN(as)) return 'lost'; // Skor geçerli değilse kaybetmiş say
+
+                    const totalGoals = hs + as;
+
+                    switch(trackedBetType) {
+                        case 'home_win': return hs > as ? 'won' : 'lost';
+                        case 'away_win': return as > hs ? 'won' : 'lost';
+                        case 'draw': return hs === as ? 'won' : 'lost';
+                        case 'btts_yes': return hs > 0 && as > 0 ? 'won' : 'lost';
+                        case 'btts_no': return hs === 0 || as === 0 ? 'won' : 'lost';
+                        default:
+                            if (trackedBetType.startsWith('over_')) {
+                                const value = parseFloat(trackedBetType.split('_')[1]);
+                                return totalGoals > value ? 'won' : 'lost';
+                            }
+                            if (trackedBetType.startsWith('under_')) {
+                                const value = parseFloat(trackedBetType.split('_')[1]);
+                                return totalGoals < value ? 'won' : 'lost';
+                            }
+                            // Korner gibi verisi olmayan bahisler için şimdilik 'lost' dönüyoruz
+                            return 'lost';
+                    }
                 },
                 showDetailView(match) { this.selectedMatch = match; this.currentView = 'detail'; },
                 showListView() { this.selectedMatch = null; this.currentView = 'list'; },
@@ -355,4 +385,3 @@
     </script>
 </body>
 </html>
-
