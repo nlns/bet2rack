@@ -38,8 +38,9 @@ export default {
                 
                 const formattedMatches = data.matches.map(item => {
                     let trackedInfo = this.trackedBets[item.id];
-                    if (item.time === 'BİTTİ' && trackedInfo && trackedInfo.betStatus === 'tracking') {
-                        trackedInfo.betStatus = this.checkBetResult(item, trackedInfo.trackedBet);
+                    if (trackedInfo) { // Sadece takip edilenler için durum kontrolü yap
+                        let newStatus = this.checkBetResult(item, trackedInfo.trackedBet);
+                        trackedInfo.betStatus = newStatus;
                     }
                     return { ...item, betStatus: trackedInfo ? trackedInfo.betStatus : 'default', trackedBet: trackedInfo ? trackedInfo.trackedBet : null, };
                 });
@@ -61,10 +62,17 @@ export default {
                 if (!isRefresh) this.loading = false;
             }
         },
+        // Bahis sonucunu kontrol eden fonksiyon güncellendi
         checkBetResult(match, trackedBetType) {
-            const hs = parseInt(match.homeScore); const as = parseInt(match.awayScore);
-            if(isNaN(hs) || isNaN(as)) return 'lost';
+            // Maç bitmediyse veya skor yoksa, bahis beklemededir.
+            if (match.time !== 'BİTTİ' || match.homeScore === null || match.awayScore === null) {
+                return 'tracking'; // Sarı renk
+            }
+
+            const hs = parseInt(match.homeScore);
+            const as = parseInt(match.awayScore);
             const totalGoals = hs + as;
+
             switch(trackedBetType) {
                 case 'home_win': return hs > as ? 'won' : 'lost';
                 case 'away_win': return as > hs ? 'won' : 'lost';
@@ -84,9 +92,12 @@ export default {
                 const allLeagues = [...this.matchesData.top, ...this.matchesData.other];
                 const matchToUpdate = allLeagues.flatMap(l => l.matches).find(m => m.id === this.selectedMatch.id);
                 if (matchToUpdate) {
-                    matchToUpdate.betStatus = 'tracking';
+                    // Takip et butonuna tıklandığında anında durum kontrolü yap
+                    const initialStatus = this.checkBetResult(matchToUpdate, betType);
+                    
+                    matchToUpdate.betStatus = initialStatus;
                     matchToUpdate.trackedBet = betType;
-                    this.trackedBets[matchToUpdate.id] = { betStatus: 'tracking', trackedBet: betType };
+                    this.trackedBets[matchToUpdate.id] = { betStatus: initialStatus, trackedBet: betType };
                     this.saveTrackedBets();
                 }
                 this.showListView();

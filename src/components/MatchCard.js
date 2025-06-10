@@ -4,33 +4,33 @@ export default {
     computed: {
         cardClasses() {
             switch (this.match.betStatus) {
-                case 'tracking': return 'bg-red-50 border border-red-200';
-                case 'won': return 'bg-green-50 border border-green-200';
-                case 'lost': return 'bg-gray-200 border border-gray-300';
+                case 'tracking': return 'bg-yellow-50 border border-yellow-300'; // SARI
+                case 'won': return 'bg-green-50 border border-green-300';      // YEŞİL
+                case 'lost': return 'bg-red-50 border border-red-300';          // KIRMIZI
                 default: return 'bg-white';
             }
         },
         textClasses() {
             switch (this.match.betStatus) {
-                case 'tracking': return 'text-red-900';
+                case 'tracking': return 'text-yellow-900';
                 case 'won': return 'text-green-900';
-                case 'lost': return 'text-gray-600';
+                case 'lost': return 'text-red-900';
                 default: return 'text-gray-800';
             }
         },
         timeClasses() {
             switch (this.match.betStatus) {
-                case 'tracking': return 'text-red-600 font-bold';
+                case 'tracking': return 'text-yellow-700 font-bold';
                 case 'won': return 'text-green-600';
-                case 'lost': return 'text-gray-500';
+                case 'lost': return 'text-red-600';
                 default: return 'text-gray-500';
             }
         },
         catEmoji() {
             switch (this.match.betStatus) {
-                case 'tracking': return '🙀';
-                case 'won': return '😸';
-                case 'lost': return '�';
+                case 'tracking': return '🧐'; // İzleyen/Düşünen
+                case 'won': return '😸';      // Kazanan
+                case 'lost': return '😿';     // Kaybeden
                 default: return '🐱';
             }
         }

@@ -1,6 +1,5 @@
 const fetch = require('node-fetch');
 
-// YENİ: Oranları işleyen yardımcı fonksiyon
 const formatOdds = (oddsResponse) => {
     const odds = { match_winner: [], over_under: [], btts: [] };
     if (!oddsResponse || !oddsResponse.response || oddsResponse.response.length === 0) {
@@ -53,7 +52,7 @@ exports.handler = async function (event, context) {
             fetch(`https://api-football-v1.p.rapidapi.com/v3/odds?fixture=${matchId}`, { headers })
         ]);
 
-        if (!eventsRes.ok || !standingsRes.ok) { // oddsRes'i zorunlu kılmıyoruz
+        if (!eventsRes.ok || !standingsRes.ok) {
             throw new Error('Detay verileri çekilirken bir API hatası oluştu.');
         }
 
