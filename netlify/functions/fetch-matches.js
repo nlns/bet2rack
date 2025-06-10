@@ -1,6 +1,5 @@
 const fetch = require('node-fetch');
 
-// API'den gelen veriyi bizim uygulamamızın anlayacağı formata çeviren yardımcı fonksiyon
 const formatMatches = (apiResponse) => {
     if (!apiResponse || !apiResponse.response || apiResponse.response.length === 0) {
         return [];

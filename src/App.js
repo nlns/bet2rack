@@ -38,7 +38,7 @@ export default {
                 
                 const formattedMatches = data.matches.map(item => {
                     let trackedInfo = this.trackedBets[item.id];
-                    if (trackedInfo) { // Sadece takip edilenler için durum kontrolü yap
+                    if (trackedInfo) {
                         let newStatus = this.checkBetResult(item, trackedInfo.trackedBet);
                         trackedInfo.betStatus = newStatus;
                     }
@@ -62,28 +62,34 @@ export default {
                 if (!isRefresh) this.loading = false;
             }
         },
-        // Bahis sonucunu kontrol eden fonksiyon güncellendi
         checkBetResult(match, trackedBetType) {
-            // Maç bitmediyse veya skor yoksa, bahis beklemededir.
-            if (match.time !== 'BİTTİ' || match.homeScore === null || match.awayScore === null) {
-                return 'tracking'; // Sarı renk
+            if (!trackedBetType) return 'default';
+            const currentStatus = this.trackedBets[match.id]?.betStatus;
+            if (currentStatus === 'won' || currentStatus === 'lost') {
+                return currentStatus;
             }
 
             const hs = parseInt(match.homeScore);
             const as = parseInt(match.awayScore);
-            const totalGoals = hs + as;
 
-            switch(trackedBetType) {
-                case 'home_win': return hs > as ? 'won' : 'lost';
-                case 'away_win': return as > hs ? 'won' : 'lost';
-                case 'draw': return hs === as ? 'won' : 'lost';
-                case 'btts_yes': return hs > 0 && as > 0 ? 'won' : 'lost';
-                case 'btts_no': return hs === 0 || as === 0 ? 'won' : 'lost';
-                default:
-                    if (trackedBetType.startsWith('over_')) { const value = parseFloat(trackedBetType.split('_')[1]); return totalGoals > value ? 'won' : 'lost'; }
-                    if (trackedBetType.startsWith('under_')) { const value = parseFloat(trackedBetType.split('_')[1]); return totalGoals < value ? 'won' : 'lost'; }
-                    return 'lost';
+            // Maç devam ederken kazanan bahisleri anında belirle
+            if (!isNaN(hs) && !isNaN(as)) {
+                const totalGoals = hs + as;
+                if (trackedBetType.startsWith('over_')) {
+                    const value = parseFloat(trackedBetType.split('_')[1]);
+                    if (totalGoals > value) return 'won';
+                }
+                if (trackedBetType === 'btts_yes') {
+                    if (hs > 0 && as > 0) return 'won';
+                }
             }
+
+            // Maç bittiyse ve bahis hala kazanmadıysa, KAYBEDEN durumunu belirle
+            if (match.time === 'BİTTİ') {
+                return 'lost';
+            }
+            
+            return 'tracking';
         },
         showDetailView(match) { this.sharedState.showDetailView(match); },
         showListView() { this.sharedState.showListView(); this.fetchMatches(true); },
@@ -92,7 +98,6 @@ export default {
                 const allLeagues = [...this.matchesData.top, ...this.matchesData.other];
                 const matchToUpdate = allLeagues.flatMap(l => l.matches).find(m => m.id === this.selectedMatch.id);
                 if (matchToUpdate) {
-                    // Takip et butonuna tıklandığında anında durum kontrolü yap
                     const initialStatus = this.checkBetResult(matchToUpdate, betType);
                     
                     matchToUpdate.betStatus = initialStatus;
@@ -110,7 +115,7 @@ export default {
         },
         startAutoRefresh() {
             this.stopAutoRefresh();
-            this.refreshInterval = setInterval(() => this.fetchMatches(true), 60000);
+            this.refreshInterval = setInterval(() => this.fetchMatches(true), 30000);
         },
         stopAutoRefresh() {
             if (this.refreshInterval) clearInterval(this.refreshInterval);

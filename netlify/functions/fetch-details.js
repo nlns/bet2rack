@@ -5,30 +5,30 @@ const formatOdds = (oddsResponse) => {
     if (!oddsResponse || !oddsResponse.response || oddsResponse.response.length === 0) {
         return odds;
     }
-    const bookmaker = oddsResponse.response[0].bookmakers.find(b => b.id === 8); // Bet365
+    const bookmaker = oddsResponse.response[0].bookmakers.find(b => b.id === 8); // Bet365 (Örnek)
     if (!bookmaker) return odds;
 
-    const matchWinnerBet = bookmaker.bets.find(b => b.id === 1);
+    const matchWinnerBet = bookmaker.bets.find(b => b.name === 'Match Winner');
     if (matchWinnerBet) {
-        odds.match_winner.push({ type: 'home_win', label: '1', odd: matchWinnerBet.values.find(v => v.value === 'Home')?.odd || '-' });
-        odds.match_winner.push({ type: 'draw', label: 'X', odd: matchWinnerBet.values.find(v => v.value === 'Draw')?.odd || '-' });
-        odds.match_winner.push({ type: 'away_win', label: '2', odd: matchWinnerBet.values.find(v => v.value === 'Away')?.odd || '-' });
+        odds.match_winner.push({ type: 'home_win', label: '1', odd: matchWinnerBet.values.find(v => v.value === 'Home')?.odd || null });
+        odds.match_winner.push({ type: 'draw', label: 'X', odd: matchWinnerBet.values.find(v => v.value === 'Draw')?.odd || null });
+        odds.match_winner.push({ type: 'away_win', label: '2', odd: matchWinnerBet.values.find(v => v.value === 'Away')?.odd || null });
     }
 
-    const overUnderBet = bookmaker.bets.find(b => b.id === 5); // Goals Over/Under
+    const overUnderBet = bookmaker.bets.find(b => b.name === 'Goals Over/Under');
     if (overUnderBet) {
         odds.over_under = overUnderBet.values.map(v => ({
-            type: `${v.value.toLowerCase().replace(' ', '_')}`,
+            type: `${v.value.toLowerCase().replace('/', '_')}`,
             label: v.value,
             value: parseFloat(v.value.split(' ')[1]),
             odd: v.odd
         }));
     }
 
-    const bttsBet = bookmaker.bets.find(b => b.id === 8); // Both Teams to Score
+    const bttsBet = bookmaker.bets.find(b => b.name === 'Both Teams to Score');
     if (bttsBet) {
-        odds.btts.push({ type: 'btts_yes', label: 'VAR', odd: bttsBet.values.find(v => v.value === 'Yes')?.odd || '-' });
-        odds.btts.push({ type: 'btts_no', label: 'YOK', odd: bttsBet.values.find(v => v.value === 'No')?.odd || '-' });
+        odds.btts.push({ type: 'btts_yes', label: 'VAR', odd: bttsBet.values.find(v => v.value === 'Yes')?.odd || null });
+        odds.btts.push({ type: 'btts_no', label: 'YOK', odd: bttsBet.values.find(v => v.value === 'No')?.odd || null });
     }
     
     return odds;
@@ -58,7 +58,7 @@ exports.handler = async function (event, context) {
 
         const eventsData = await eventsRes.json();
         const standingsData = await standingsRes.json();
-        const oddsData = await oddsRes.json();
+        const oddsData = await (oddsRes.ok ? oddsRes.json() : { response: [] }); 
 
         const fixtureData = eventsData.response[0];
         let details = { events: [], stats: [], lineups: [], standings: [], odds: {} };
