@@ -1,6 +1,6 @@
 const ApiService = {
-    async fetchMatches(date) {
-        const response = await fetch(`/.netlify/functions/fetch-matches?date=${date}`);
+    async fetchMatches() {
+        const response = await fetch(`/.netlify/functions/fetch-matches`);
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || `Sunucu Hatası: ${response.status}`);
@@ -8,8 +8,8 @@ const ApiService = {
         return await response.json();
     },
 
-    async fetchDetails(matchId, leagueId) {
-        const response = await fetch(`/.netlify/functions/fetch-details?matchId=${matchId}&leagueId=${leagueId}`);
+    async fetchDetails(matchId, leagueId, season) {
+        const response = await fetch(`/.netlify/functions/fetch-details?matchId=${matchId}&leagueId=${leagueId}&season=${season}`);
         if (!response.ok) {
             throw new Error('Detay verileri çekilemedi.');
         }

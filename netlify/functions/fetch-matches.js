@@ -1,64 +1,78 @@
 const fetch = require('node-fetch');
 
+// API'den gelen veriyi bizim uygulamamızın anlayacağı formata çeviren yardımcı fonksiyon
+const formatMatches = (apiResponse) => {
+    if (!apiResponse || !apiResponse.response || apiResponse.response.length === 0) {
+        return [];
+    }
+    return apiResponse.response.map(item => {
+        const { fixture, league, teams, goals } = item;
+        const status = fixture.status;
+        let time;
+        if (['FT', 'AET', 'PEN'].includes(status.short)) time = 'BİTTİ';
+        else if (status.short === 'HT') time = 'DEVRE';
+        else if (status.short === 'NS') time = new Date(fixture.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        else time = status.elapsed + "'";
+
+        return {
+            id: fixture.id,
+            leagueId: league.id,
+            season: league.season,
+            homeId: teams.home.id,
+            awayId: teams.away.id,
+            homeTeam: teams.home.name,
+            awayTeam: teams.away.name,
+            homeLogo: teams.home.logo,
+            awayLogo: teams.away.logo,
+            homeScore: goals.home !== null ? goals.home : '-',
+            awayScore: goals.away !== null ? goals.away : '-',
+            time: time,
+            leagueName: league.name,
+            leagueCountry: league.country,
+        };
+    });
+};
+
 exports.handler = async function (event, context) {
-    const { date } = event.queryStringParameters;
     const API_KEY = process.env.API_FOOTBALL_KEY;
-    // YENİ: Sezon bilgisi artık dinamik olarak tarihten alınıyor
-    const season = new Date(date).getFullYear();
-
-    // API'ye tek ve genel bir istek yapıyoruz
-    const url = `https://api-football-v1.p.rapidapi.com/v3/fixtures?season=${season}&date=${date}`;
-
     const headers = {
         'x-rapidapi-host': 'api-football-v1.p.rapidapi.com',
         'x-rapidapi-key': API_KEY,
     };
 
     try {
-        const response = await fetch(url, { headers });
+        // 1. ADIM: Canlı maçları sorgula
+        let response = await fetch('https://api-football-v1.p.rapidapi.com/v3/fixtures?live=all', { headers });
+        let data = await response.json();
 
-        if (!response.ok) {
-             return {
-                statusCode: response.status,
-                body: JSON.stringify({ error: `API Hatası: ${response.statusText}` }),
-            };
-        }
-
-        const data = await response.json();
-        
-        if (data.errors && Object.keys(data.errors).length > 0) {
-            // API'den gelen spesifik hata mesajını göster
-            const errorMessage = data.errors.requests || JSON.stringify(data.errors);
-            throw new Error(`API tarafından hata bildirildi: ${errorMessage}`);
-        }
-
-        const formattedMatches = data.response.map(item => {
-            const status = item.fixture.status;
-            let time;
-            if (status.short === 'FT' || status.short === 'AET' || status.short === 'PEN') time = 'BİTTİ';
-            else if (status.short === 'HT') time = 'DEVRE';
-            else if (status.short === 'NS') time = new Date(item.fixture.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-            else time = status.elapsed + "'";
-
+        // 2. ADIM: Canlı maç varsa, onları formatla ve gönder
+        if (data.response && data.response.length > 0) {
             return {
-                id: item.fixture.id, 
-                leagueId: item.league.id,
-                // YENİ: Sezon bilgisi de frontend'e gönderiliyor
-                season: item.league.season,
-                homeId: item.teams.home.id, awayId: item.teams.away.id,
-                homeTeam: item.teams.home.name, awayTeam: item.teams.away.name,
-                homeLogo: item.teams.home.logo, awayLogo: item.teams.away.logo,
-                homeScore: item.goals.home !== null ? item.goals.home : '-',
-                awayScore: item.goals.away !== null ? item.goals.away : '-',
-                time: time,
-                leagueName: item.league.name,
-                leagueCountry: item.league.country,
+                statusCode: 200,
+                body: JSON.stringify({
+                    matches: formatMatches(data),
+                    isLive: true,
+                    message: `Şu an Oynanan Canlı Maçlar (${data.results})`
+                }),
             };
-        });
+        }
+
+        // 3. ADIM: Canlı maç yoksa, yarının fikstürünü sorgula
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const dateString = tomorrow.toISOString().slice(0, 10);
+        const season = tomorrow.getFullYear();
+        
+        response = await fetch(`https://api-football-v1.p.rapidapi.com/v3/fixtures?season=${season}&date=${dateString}`, { headers });
+        data = await response.json();
 
         return {
             statusCode: 200,
-            body: JSON.stringify(formattedMatches),
+            body: JSON.stringify({
+                matches: formatMatches(data),
+                isLive: false,
+                message: `Yarının Fikstürü (${dateString})`
+            }),
         };
 
     } catch (e) {
@@ -68,5 +82,3 @@ exports.handler = async function (event, context) {
         };
     }
 };
-
-

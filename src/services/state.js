@@ -1,7 +1,7 @@
 import { reactive } from 'vue';
 
 export const state = reactive({
-    currentView: 'list', // list veya detail
+    currentView: 'list', 
     selectedMatch: null,
 
     showDetailView(match) {

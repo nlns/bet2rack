@@ -3,8 +3,6 @@ const fetch = require('node-fetch');
 exports.handler = async function (event, context) {
     const { matchId, leagueId, season } = event.queryStringParameters;
     const API_KEY = process.env.API_FOOTBALL_KEY;
-    
-    // YENİ: Sezon bilgisi artık dinamik olarak alınıyor
     const finalSeason = season || new Date().getFullYear();
 
     const headers = {
@@ -46,7 +44,6 @@ exports.handler = async function (event, context) {
             }).filter(s => s.home !== null || s.away !== null);
         }
 
-        // Puan durumu verisi bazen boş gelebilir, bunu kontrol ediyoruz.
         if (standingsData.response[0] && standingsData.response[0].league && standingsData.response[0].league.standings) {
              details.standings = standingsData.response[0].league.standings[0] || [];
         }
