@@ -8,17 +8,14 @@ exports.handler = async function (event, context) {
     const API_KEY = process.env.API_FOOTBALL_KEY;
     const season = 2023;
 
-    // Sorgulanacak tüm liglerin ID'leri
-    // Bu listeyi daha da genişletebilirsiniz.
+    // Sorgulanacak popüler liglerin ID'leri
     const leagueIds = [
-        // Popüler Ligler
         203, // Turkey - Süper Lig
         39,  // England - Premier League
         140, // Spain - La Liga
         78,  // Germany - Bundesliga
         135, // Italy - Serie A
         61,  // France - Ligue 1
-        // Diğer Ligler
         2,   // UEFA - Champions League
         88,  // Netherlands - Eredivisie
         94,  // Portugal - Primeira Liga
@@ -43,13 +40,11 @@ exports.handler = async function (event, context) {
                     allMatches = allMatches.concat(data.response);
                 }
             } else {
-                // Hata durumunda konsola uyarı yaz ama diğer isteklere devam et
                 console.warn(`Lig ${leagueId} için API isteği başarısız oldu: ${response.statusText}`);
             }
 
             // API rate limit'e takılmamak için her istek arasına küçük bir gecikme ekliyoruz.
-            // Ücretsiz planlarda bu genellikle iyi bir pratiktir.
-            await delay(200); // 200 milisaniye bekle
+            await delay(200);
 
         } catch (error) {
             console.error(`Lig ${leagueId} için istekte ciddi bir hata oluştu:`, error);
