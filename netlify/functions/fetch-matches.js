@@ -1,11 +1,14 @@
 const fetch = require('node-fetch');
 
 exports.handler = async function (event, context) {
-  const { date } = event.queryStringParameters;
+  // YENİ: leagueId parametresini al
+  const { date, leagueId } = event.queryStringParameters;
   const API_KEY = process.env.API_FOOTBALL_KEY;
   const season = 2023;
-  const leagueId = 203;
-  const url = `https://api-football-v1.p.rapidapi.com/v3/fixtures?league=${leagueId}&season=${season}&date=${date}`;
+  // Varsayılan lig ID'si, eğer belirtilmemişse
+  const finalLeagueId = leagueId || 203; 
+
+  const url = `https://api-football-v1.p.rapidapi.com/v3/fixtures?league=${finalLeagueId}&season=${season}&date=${date}`;
 
   try {
     const response = await fetch(url, {
@@ -59,4 +62,4 @@ exports.handler = async function (event, context) {
     };
   }
 };
-
+    
