@@ -1,14 +1,13 @@
 const fetch = require('node-fetch');
 
 exports.handler = async function (event, context) {
-  // YENİ: leagueId parametresini al
-  const { date, leagueId } = event.queryStringParameters;
+  // Artık lig ID'si almıyoruz, tüm ligler için sorgu yapacağız.
+  const { date } = event.queryStringParameters;
   const API_KEY = process.env.API_FOOTBALL_KEY;
   const season = 2023;
-  // Varsayılan lig ID'si, eğer belirtilmemişse
-  const finalLeagueId = leagueId || 203; 
 
-  const url = `https://api-football-v1.p.rapidapi.com/v3/fixtures?league=${finalLeagueId}&season=${season}&date=${date}`;
+  // league parametresini URL'den kaldırıyoruz
+  const url = `https://api-football-v1.p.rapidapi.com/v3/fixtures?season=${season}&date=${date}`;
 
   try {
     const response = await fetch(url, {
@@ -47,7 +46,8 @@ exports.handler = async function (event, context) {
             homeScore: item.goals.home !== null ? item.goals.home : '-',
             awayScore: item.goals.away !== null ? item.goals.away : '-',
             time: time,
-            leagueName: item.league.name
+            leagueName: item.league.name,
+            leagueCountry: item.league.country, // Gruplama için ülke bilgisi eklendi
         };
     });
 
@@ -62,4 +62,4 @@ exports.handler = async function (event, context) {
     };
   }
 };
-    
+
