@@ -24,8 +24,8 @@ const formatMatches = (apiResponse) => {
             awayTeam: teams.away.name,
             homeLogo: teams.home.logo,
             awayLogo: teams.away.logo,
-            homeScore: goals.home !== null ? goals.home : '-',
-            awayScore: goals.away !== null ? goals.away : '-',
+            homeScore: goals.home,
+            awayScore: goals.away,
             time: time,
             leagueName: league.name,
             leagueCountry: league.country,
@@ -41,11 +41,9 @@ exports.handler = async function (event, context) {
     };
 
     try {
-        // 1. ADIM: Canlı maçları sorgula
         let response = await fetch('https://api-football-v1.p.rapidapi.com/v3/fixtures?live=all', { headers });
         let data = await response.json();
 
-        // 2. ADIM: Canlı maç varsa, onları formatla ve gönder
         if (data.response && data.response.length > 0) {
             return {
                 statusCode: 200,
@@ -57,7 +55,6 @@ exports.handler = async function (event, context) {
             };
         }
 
-        // 3. ADIM: Canlı maç yoksa, yarının fikstürünü sorgula
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const dateString = tomorrow.toISOString().slice(0, 10);

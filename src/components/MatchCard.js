@@ -30,7 +30,7 @@ export default {
             switch (this.match.betStatus) {
                 case 'tracking': return '🙀';
                 case 'won': return '😸';
-                case 'lost': return '😿';
+                case 'lost': return '�';
                 default: return '🐱';
             }
         }
