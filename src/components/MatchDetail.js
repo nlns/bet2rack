@@ -1,137 +1,172 @@
 import ApiService from '../services/api.js';
 
 export default {
-    props: ['match'],
-    emits: ['track-bet'],
+    components: {
+        'league-group': LeagueGroupComponent,
+        'match-detail': MatchDetailComponent
+    },
     data() {
         return {
-            isLoadingDetails: true,
-            detailError: null,
-            activeTab: 'bet2rack',
-            activeBettingTab: 'Maç Sonucu', // YENİ: BET2RACK için iç sekme
-            selectedBet: this.match.trackedBet,
-            details: { events: [], stats: [], lineups: [], standings: [], odds: {} }, 
-            tabs: [
-                { key: 'bet2rack', label: 'BET2RACK' },
-                { key: 'summary', label: 'ÖZET' },
-                { key: 'stats', label: 'İSTATİSTİKLER' },
-                { key: 'lineups', label: 'KADROLAR' },
-                { key: 'standings', label: 'PUAN DURUMU' }
-            ]
-        }
-    },
-    methods: {
-        async fetchDetails() {
-            this.isLoadingDetails = true;
-            this.detailError = null;
-            try {
-                this.details = await ApiService.fetchDetails(this.match.id, this.match.leagueId, this.match.season);
-            } catch (e) {
-                this.detailError = e.message;
-            } finally {
-                this.isLoadingDetails = false;
-            }
+            loading: true, 
+            error: null, 
+            matchesData: { leagues: [], isLive: false, message: '' },
+            trackedBets: {}, 
+            refreshInterval: null,
+            topLeagueIds: [203, 39, 140, 78, 135, 61],
+            sharedState: state
         }
     },
     computed: {
-        availableBets() {
-            const homeScore = parseInt(this.match.homeScore);
-            const awayScore = parseInt(this.match.awayScore);
-            const totalGoals = isNaN(homeScore) || isNaN(awayScore) ? -1 : homeScore + awayScore;
-            const odds = this.details.odds || {};
-
-            const matchWinnerOptions = odds.match_winner ? odds.match_winner.map(bet => ({ type: bet.type, label: bet.label, odd: bet.odd })) : [{type: 'home_win', label: '1'}, {type: 'draw', label: 'X'}, {type: 'away_win', label: '2'}];
-            const bttsOptions = odds.btts ? odds.btts.map(bet => ({ type: bet.type, label: bet.label, odd: bet.odd })) : [{type: 'btts_yes', label: 'VAR'}, {type: 'btts_no', label: 'YOK'}];
-            
-            let overUnderOptions = [];
-            if (odds.over_under) {
-                 overUnderOptions = odds.over_under.filter(bet => totalGoals === -1 || bet.value > totalGoals).map(bet => ({ type: bet.type, label: bet.label, odd: bet.odd }));
-            } else {
-                 const defaultOverUnder = [0.5, 1.5, 2.5, 3.5, 4.5];
-                 defaultOverUnder.forEach(val => {
-                     if(totalGoals === -1 || val > totalGoals) {
-                         overUnderOptions.push({type: `over_${val}`, label: `${val} Üst`});
-                         overUnderOptions.push({type: `under_${val}`, label: `${val} Alt`});
-                     }
-                 });
-            }
-
-            return [
-                { name: 'Maç Sonucu', options: matchWinnerOptions },
-                { name: 'Toplam Gol', options: overUnderOptions },
-                { name: 'Karşılıklı Gol', options: bttsOptions },
-                { name: 'Toplam Korner', options: [{type: 'corner_over_8.5', label: '8.5 Korner Üst'}, {type: 'corner_under_8.5', label: '8.5 Korner Alt'}] }
-            ];
+        currentView() { return this.sharedState.currentView; },
+        selectedMatch() { return this.sharedState.selectedMatch; },
+        topLeagues() {
+            return this.matchesData.leagues.filter(l => this.topLeagueIds.includes(l.matches[0]?.leagueId));
         },
-        formattedTrackedBet() {
-            const allBetOptions = this.availableBets.flatMap(c => c.options);
-            const bet = allBetOptions.find(b => b.type === this.match.trackedBet);
-            return bet ? bet.label : 'Bilinmeyen Bahis';
-        },
-        bettingTabs() {
-            return this.availableBets.filter(cat => cat.options.length > 0);
+        otherLeagues() {
+            return this.matchesData.leagues.filter(l => !this.topLeagueIds.includes(l.matches[0]?.leagueId));
         }
     },
-    mounted() {
-        this.fetchDetails();
+    methods: {
+        async fetchMatches(isRefresh = false) {
+            if (!isRefresh) this.loading = true;
+            this.error = null;
+            try {
+                const data = await ApiService.fetchMatches();
+                
+                const formattedMatches = data.matches.map(item => {
+                    let trackedInfo = this.trackedBets[item.id];
+                    if (trackedInfo) {
+                        let newStatus = this.checkBetResult(item, trackedInfo.trackedBet);
+                        trackedInfo.betStatus = newStatus;
+                    }
+                    return { ...item, betStatus: trackedInfo ? trackedInfo.betStatus : 'default', trackedBet: trackedInfo ? trackedInfo.trackedBet : null, };
+                });
+                
+                const grouped = formattedMatches.reduce((acc, match) => {
+                    const leagueName = `${match.leagueCountry} - ${match.leagueName}`;
+                    (acc[leagueName] = acc[leagueName] || []).push(match);
+                    return acc;
+                }, {});
+
+                this.matchesData.leagues = Object.entries(grouped).map(([name, matches]) => ({name, matches}));
+                this.matchesData.isLive = data.isLive;
+                this.matchesData.message = data.message;
+                
+                this.saveTrackedBets();
+            } catch (e) {
+                this.error = e.message;
+            } finally {
+                if (!isRefresh) this.loading = false;
+            }
+        },
+        checkBetResult(match, trackedBetType) {
+            if (!trackedBetType) return 'default';
+            // Bahis zaten sonuçlandıysa, durumunu koru
+            const currentStatus = this.trackedBets[match.id]?.betStatus;
+            if (currentStatus === 'won' || currentStatus === 'lost') {
+                return currentStatus;
+            }
+
+            const hs = parseInt(match.homeScore);
+            const as = parseInt(match.awayScore);
+
+            if (isNaN(hs) || isNaN(as)) return 'tracking'; // Maç başlamadıysa veya skor yoksa beklemede
+            
+            // Eğer maç bittiyse ve bahis hala beklemedeyse, kesin sonucu belirle
+            if (match.time === 'BİTTİ') {
+                // ... bahis mantığı burada ...
+                 return 'lost'; // Geçici olarak
+            }
+
+            // Maç devam ederken kazanan bahisleri anında belirle
+            let potentialResult = 'tracking'; // Varsayılan durum: Beklemede (Sarı)
+            const totalGoals = hs + as;
+            
+            if (trackedBetType.startsWith('over_')) {
+                const value = parseFloat(trackedBetType.split('_')[1]);
+                if (totalGoals > value) potentialResult = 'won';
+            } else if (trackedBetType === 'btts_yes') {
+                if (hs > 0 && as > 0) potentialResult = 'won';
+            }
+            
+            return potentialResult;
+        },
+        showDetailView(match) { this.sharedState.showDetailView(match); },
+        showListView() { this.sharedState.showListView(); this.fetchMatches(true); },
+        trackBet(betType) {
+             if (this.selectedMatch) {
+                const allLeagues = [...this.matchesData.top, ...this.matchesData.other];
+                const matchToUpdate = allLeagues.flatMap(l => l.matches).find(m => m.id === this.selectedMatch.id);
+                if (matchToUpdate) {
+                    const initialStatus = this.checkBetResult(matchToUpdate, betType);
+                    
+                    matchToUpdate.betStatus = initialStatus;
+                    matchToUpdate.trackedBet = betType;
+                    this.trackedBets[matchToUpdate.id] = { betStatus: initialStatus, trackedBet: betType };
+                    this.saveTrackedBets();
+                }
+                this.showListView();
+            }
+        },
+        saveTrackedBets() { localStorage.setItem('bet2rack_tracked_bets', JSON.stringify(this.trackedBets)); },
+        loadTrackedBets() {
+            const savedBets = localStorage.getItem('bet2rack_tracked_bets');
+            if (savedBets) { this.trackedBets = JSON.parse(savedBets); }
+        },
+        startAutoRefresh() {
+            this.stopAutoRefresh();
+            this.refreshInterval = setInterval(() => this.fetchMatches(true), 30000); // 30 saniyeye düşürüldü
+        },
+        stopAutoRefresh() {
+            if (this.refreshInterval) clearInterval(this.refreshInterval);
+        }
+    },
+    mounted() { 
+        this.loadTrackedBets(); 
+        this.fetchMatches();
+        this.startAutoRefresh();
+    },
+    beforeUnmount() {
+        this.stopAutoRefresh();
     },
     template: `
-        <div class="flex flex-col h-full">
-            <div class="text-center py-4 bg-white rounded-lg shadow-md mb-4"><!-- ... Skor alanı ... --></div>
-            <div class="flex-grow bg-white rounded-lg shadow-md">
-                <div class="flex border-b border-gray-200 overflow-x-auto">
-                     <button v-for="tab in tabs" :key="tab.key" @click="activeTab = tab.key" :class="activeTab === tab.key ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-shrink-0 px-4 py-3 font-semibold border-b-2 transition-colors duration-200 text-sm">{{ tab.label }}</button>
+        <header class="bg-white shadow-sm sticky top-0 z-10">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center relative">
+                <div class="w-1/3">
+                    <button v-if="currentView === 'detail'" @click="showListView" class="text-gray-500 hover:text-blue-600 z-20">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    </button>
                 </div>
-                
-                <div v-if="activeTab === 'bet2rack'" class="p-4">
-                    <!-- YENİ: Alt Sekme Grubu -->
-                    <div class="flex items-center border-b border-gray-200 mb-4">
-                        <button v-for="betTab in bettingTabs" :key="betTab.name" @click="activeBettingTab = betTab.name"
-                                :class="activeBettingTab === betTab.name ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500'"
-                                class="px-3 py-2 text-sm font-medium border-b-2">
-                            {{ betTab.name }}
-                        </button>
-                    </div>
-
-                    <div v-if="match.betStatus !== 'default' && match.betStatus !== 'tracking'" class="text-center p-4 mb-4 rounded-lg" :class="{'bg-green-50 text-green-800': match.betStatus === 'won', 'bg-red-50 text-red-800': match.betStatus === 'lost', 'bg-yellow-50 text-yellow-800': match.betStatus === 'tracking'}">
-                        <p>Bu maça oynadığınız <strong class="font-bold">{{ formattedTrackedBet }}</strong> bahsi <strong class="font-bold">{{ match.betStatus === 'won' ? 'KAZANDI' : (match.betStatus === 'lost' ? 'KAYBETTİ' : 'BEKLİYOR') }}</strong>.</p>
-                    </div>
-                    
-                    <div v-for="category in bettingTabs" v-show="activeBettingTab === category.name">
-                        <div v-if="category.name === 'Maç Sonucu'" class="grid grid-cols-3 gap-2">
-                            <button v-for="bet in category.options" @click="selectedBet = bet.type" class="bet-option p-4 rounded-lg border-2 flex flex-col items-center justify-center" :class="selectedBet === bet.type ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'">
-                                <span class="font-semibold text-gray-600">{{ bet.label }}</span>
-                                <span v-if="bet.odd" class="font-bold text-lg text-blue-700 mt-1">{{ bet.odd }}</span>
-                            </button>
-                        </div>
-                        <div v-else class="space-y-2">
-                            <button v-for="bet in category.options" @click="selectedBet = bet.type" class="bet-option w-full text-left p-4 rounded-lg border-2 flex justify-between items-center" :class="selectedBet === bet.type ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'">
-                                <span class="font-semibold">{{ bet.label }}</span>
-                                <span v-if="bet.odd" class="bg-blue-100 text-blue-800 font-bold px-3 py-1 rounded-full text-sm">{{ bet.odd }}</span>
-                            </button>
-                        </div>
-                    </div>
-                     <div class="mt-6">
-                         <button @click="$emit('track-bet', selectedBet)" :disabled="!selectedBet"
-                                 class="w-full bg-blue-600 text-white font-bold py-4 rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                             {{ match.betStatus !== 'default' ? 'BAHSİ GÜNCELLE' : 'BU BAHSİ TAKİP ET' }}
-                         </button>
-                    </div>
+                <div class="w-1/3 text-center">
+                    <h1 class="text-2xl font-bold text-gray-900">Be<span class="text-blue-600">t<sup>2</sup></span>rack</h1>
                 </div>
-
-                <div v-else class="p-4">
-                    <div v-if="isLoadingDetails" class="text-center py-8 text-gray-500">Detaylar yükleniyor...</div>
-                    <div v-if="!isLoadingDetails && detailError" class="text-center py-8 text-red-500">{{ detailError }}</div>
-                    <transition name="tab-content" mode="out-in">
-                        <div :key="activeTab">
-                            <div v-if="activeTab === 'summary'"><!-- Özet içeriği --></div>
-                            <div v-if="activeTab === 'stats'"><!-- İstatistik içeriği --></div>
-                            <div v-if="activeTab === 'lineups'"><!-- Kadro içeriği --></div>
-                            <div v-if="activeTab === 'standings'"><!-- Puan durumu içeriği --></div>
-                        </div>
-                    </transition>
+                <div class="w-1/3 flex justify-end items-center gap-x-2 z-20">
+                     <button @click="fetchMatches()" class="text-gray-500 hover:text-blue-600" :disabled="loading">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" :class="{ 'animate-spin': loading }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 4l5 5M20 20l-5-5" /></svg>
+                    </button>
                 </div>
             </div>
-        </div>
+        </header>
+
+        <main class="container mx-auto p-4">
+            <div v-if="loading" class="text-center py-16"><p class="text-gray-500 font-semibold">Maçlar yükleniyor...</p></div>
+            <div v-if="!loading && error" class="text-center py-16 px-4"><p class="text-red-500 font-semibold">{{ error }}</p></div>
+
+            <transition name="fade" mode="out-in">
+                <div v-if="currentView === 'list' && !loading && !error" key="list-view">
+                    <div class="text-center mb-4 text-lg font-semibold text-gray-700">{{ matchesData.message }}</div>
+                    <div v-if="topLeagues.length > 0">
+                        <h2 class="text-lg font-bold text-blue-600 mb-2 border-b-2 border-blue-200 pb-1">Popüler Ligler</h2>
+                        <league-group v-for="league in topLeagues" :key="league.name" :league-name="league.name" :matches="league.matches" @match-selected="showDetailView" :is-live="matchesData.isLive"></league-group>
+                    </div>
+                    <div v-if="otherLeagues.length > 0" class="mt-8">
+                        <h2 class="text-lg font-bold text-gray-700 mb-2 border-b-2 border-gray-300 pb-1">Diğer Ligler</h2>
+                        <league-group v-for="league in otherLeagues" :key="league.name" :league-name="league.name" :matches="league.matches" @match-selected="showDetailView" :is-live="matchesData.isLive"></league-group>
+                    </div>
+                    <p v-if="!topLeagues.length && !otherLeagues.length" class="text-center text-gray-500 py-16">Gösterilecek maç bulunamadı.</p>
+                </div>
+                <match-detail v-else-if="currentView === 'detail'" key="detail-view" :match="selectedMatch" @track-bet="trackBet"></match-detail>
+            </transition>
+        </main>
     `
 };
