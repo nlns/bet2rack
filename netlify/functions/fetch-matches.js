@@ -1,38 +1,62 @@
 const fetch = require('node-fetch');
 
+// API'den gelen isteklere gecikme eklemek için yardımcı fonksiyon
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 exports.handler = async function (event, context) {
     const { date } = event.queryStringParameters;
     const API_KEY = process.env.API_FOOTBALL_KEY;
     const season = 2023;
 
-    // Sorgulanacak popüler liglerin ID'leri
-    const leagueIds = [203, 39, 140, 78, 135, 61]; 
+    // Sorgulanacak tüm liglerin ID'leri
+    // Bu listeyi daha da genişletebilirsiniz.
+    const leagueIds = [
+        // Popüler Ligler
+        203, // Turkey - Süper Lig
+        39,  // England - Premier League
+        140, // Spain - La Liga
+        78,  // Germany - Bundesliga
+        135, // Italy - Serie A
+        61,  // France - Ligue 1
+        // Diğer Ligler
+        2,   // UEFA - Champions League
+        88,  // Netherlands - Eredivisie
+        94,  // Portugal - Primeira Liga
+        207  // Belgium - Jupiler Pro League
+    ]; 
 
     const headers = {
         'x-rapidapi-host': 'api-football-v1.p.rapidapi.com',
         'x-rapidapi-key': API_KEY,
     };
+    
+    let allMatches = [];
 
-    // Her lig için ayrı bir API isteği oluşturuyoruz
-    const requests = leagueIds.map(leagueId => 
-        fetch(`https://api-football-v1.p.rapidapi.com/v3/fixtures?league=${leagueId}&season=${season}&date=${date}`, { headers })
-    );
-
-    try {
-        const responses = await Promise.all(requests);
-        let allMatches = [];
-
-        for (const response of responses) {
+    // Promise.all yerine, API'ye yük bindirmemek için sıralı istek yapıyoruz.
+    for (const leagueId of leagueIds) {
+        try {
+            const response = await fetch(`https://api-football-v1.p.rapidapi.com/v3/fixtures?league=${leagueId}&season=${season}&date=${date}`, { headers });
+            
             if (response.ok) {
                 const data = await response.json();
                 if (data.response) {
                     allMatches = allMatches.concat(data.response);
                 }
             } else {
-                console.warn(`Bir lig için API isteği başarısız oldu: ${response.statusText}`);
+                // Hata durumunda konsola uyarı yaz ama diğer isteklere devam et
+                console.warn(`Lig ${leagueId} için API isteği başarısız oldu: ${response.statusText}`);
             }
+
+            // API rate limit'e takılmamak için her istek arasına küçük bir gecikme ekliyoruz.
+            // Ücretsiz planlarda bu genellikle iyi bir pratiktir.
+            await delay(200); // 200 milisaniye bekle
+
+        } catch (error) {
+            console.error(`Lig ${leagueId} için istekte ciddi bir hata oluştu:`, error);
         }
-        
+    }
+
+    try {
         const formattedMatches = allMatches.map(item => {
             const status = item.fixture.status;
             let time;
