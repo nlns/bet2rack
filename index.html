@@ -262,10 +262,12 @@
                         
                         const formattedMatches = data.map(item => {
                             let trackedInfo = this.trackedBets[item.id];
+                            // **YENİ EKlenen Mantık Başlangıcı**
+                            // Eğer maç bittiyse ve takip ediliyorsa, bahis sonucunu kontrol et.
                             if (item.time === 'BİTTİ' && trackedInfo && trackedInfo.betStatus === 'tracking') {
-                                // YENİ: Gerçek bahis sonucunu kontrol et
                                 trackedInfo.betStatus = this.checkBetResult(item, trackedInfo.trackedBet);
                             }
+                            // **YENİ Eklenen Mantık Sonu**
                             return { ...item, betStatus: trackedInfo ? trackedInfo.betStatus : 'default', trackedBet: trackedInfo ? trackedInfo.trackedBet : null, };
                         });
                         
