@@ -1,9 +1,11 @@
 const fetch = require('node-fetch');
 
 exports.handler = async function (event, context) {
-    const { matchId, leagueId } = event.queryStringParameters;
+    const { matchId, leagueId, season } = event.queryStringParameters;
     const API_KEY = process.env.API_FOOTBALL_KEY;
-    const season = 2023;
+    
+    // YENİ: Sezon bilgisi artık dinamik olarak alınıyor
+    const finalSeason = season || new Date().getFullYear();
 
     const headers = {
         'x-rapidapi-host': 'api-football-v1.p.rapidapi.com',
@@ -13,7 +15,7 @@ exports.handler = async function (event, context) {
     try {
         const [eventsRes, standingsRes] = await Promise.all([
             fetch(`https://api-football-v1.p.rapidapi.com/v3/fixtures?id=${matchId}`, { headers }),
-            fetch(`https://api-football-v1.p.rapidapi.com/v3/standings?league=${leagueId}&season=${season}`, { headers }),
+            fetch(`https://api-football-v1.p.rapidapi.com/v3/standings?league=${leagueId}&season=${finalSeason}`, { headers }),
         ]);
 
         if (!eventsRes.ok || !standingsRes.ok) {
@@ -44,7 +46,10 @@ exports.handler = async function (event, context) {
             }).filter(s => s.home !== null || s.away !== null);
         }
 
-        details.standings = standingsData.response[0]?.league?.standings[0] || [];
+        // Puan durumu verisi bazen boş gelebilir, bunu kontrol ediyoruz.
+        if (standingsData.response[0] && standingsData.response[0].league && standingsData.response[0].league.standings) {
+             details.standings = standingsData.response[0].league.standings[0] || [];
+        }
 
         return {
             statusCode: 200,
